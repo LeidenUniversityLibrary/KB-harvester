@@ -57,16 +57,30 @@ class Issue():
         """Returns the PPN of the newspaper"""
         return self.didl.find('.//dc:identifier[@xsi:type="dcx:PPN"]', NAMESPACES).text
 
+    def check_file_existence(self, filename, digest):
+        logger.debug("Checking existence of %s" % filename)
+        try:
+            f = open(self.issue_path + filename, 'r')
+        except OSError:
+            logger.debug("%s does not exist")
+            return False
+        else:
+            with f:
+                return check_md5(f,digest)
+
     def save_binary(self, url, digest, filename):
-        logger.debug("Downloading %s" % url)
-        p = requests.get(url)
-        if not p.status_code == 200:
-            raise Exception('Error while getting data from %s' % url)
-        logger.debug("MD5 checksum matches download: %s" % check_md5(p.content, digest))
-        logger.debug("Saving as %s" % filename)
-        with open(self.issue_path + filename, 'wb') as f:
-            f.write(p.content)
-        logger.info("Saved %s to %s" % (url, filename))
+        if not self.check_file_existence(filename, digest):
+            logger.debug("Downloading %s" % url)
+            p = requests.get(url)
+            if not p.status_code == 200:
+                raise Exception('Error while getting data from %s' % url)
+            logger.debug("MD5 checksum matches download: %s" % check_md5(p.content, digest))
+            logger.debug("Saving as %s" % filename)
+            with open(self.issue_path + filename, 'wb') as f:
+                f.write(p.content)
+            logger.info("Saved %s to %s" % (url, filename))
+        else:
+            logger.debug("%s already downloaded :)" % url)
 
     def save_pages(self):
         """Retrieve and store page images and XML"""
@@ -138,11 +152,16 @@ class Issue():
 
 
 class Harvester():
-    def __init__(self):
+    def __init__(self, path="data/"):
         self.logger = logging.getLogger()
         self.logger.setLevel(logging.DEBUG)
         handler = logging.FileHandler("KB-harvester.log")
         self.logger.addHandler(handler)
+        try:
+            os.makedirs(path=path, exist_ok=True)
+        except OSError:
+            self.logger.critical("Could not create data storage path '%s'" % path)
+            exit(1)
 
     def harvest_newspaper_urls(self, ppn, start=1):
         """Get and process all issues of a newspaper identified by PPN"""
@@ -150,7 +169,6 @@ class Harvester():
         client = Sru()
         for resp in client.search(query=query, collection="DDD", maximumrecords=100, startrecord=start):
             records = resp.record_data.findall(".//srw:records/srw:record", namespaces=NAMESPACES)
-            print records[0].find(".//dddx:metadataKey", NAMESPACES)
             maxpos = records[-1].findtext("./srw:recordPosition", namespaces=NAMESPACES)
             print "Max recordPosition in response:", maxpos
             urls = map(self.get_record_url, records)
@@ -166,7 +184,7 @@ class Harvester():
         try:
             os.mkdir("data/" + issue.ppn_issue)
             print "Directory created"
-        except OSError as e:
+        except OSError:
             # Directory already exists
             print "Error creating directory - does it exist already?"
 
