@@ -1,4 +1,5 @@
 import os
+import errno
 from sru import Sru
 from time import sleep
 from xml.etree.ElementTree import ElementTree as ET
@@ -7,7 +8,7 @@ import hashlib
 import requests
 import logging
 
-logger = logging.getLogger('KB KB-harvester')
+logger = logging.getLogger('KB-harvester')
 logger.setLevel(logging.DEBUG)
 handler = logging.FileHandler("KB-harvester.log")
 logger.addHandler(handler)
@@ -35,10 +36,11 @@ def check_md5(content, digest):
 class Issue():
     """An issue of a newspaper"""
 
-    def __init__(self, oai_data):
+    def __init__(self, oai_data, path="data/"):
         self.oai_data = oai_data
         self.oai_header = oai_data.find('.//oai:header', NAMESPACES)
         self.didl = oai_data.find('.//didl:DIDL', NAMESPACES)
+        self.data_path = path
         logger.info("init issue")
 
     @property
@@ -79,6 +81,8 @@ class Issue():
             with open(self.issue_path + filename, 'wb') as f:
                 f.write(p.content)
             logger.info("Saved %s to %s" % (url, filename))
+            logger.debug("Sleeping for a sec")
+            sleep(1)
         else:
             logger.debug("%s already downloaded :)" % url)
 
@@ -138,7 +142,7 @@ class Issue():
 
     @property
     def issue_path(self):
-        return "data/" + self.ppn_issue + "/"
+        return self.data_path + self.ppn_issue + "/"
 
     def save_header(self):
         """Save the OAI-PMH header to a file"""
@@ -153,14 +157,18 @@ class Issue():
 
 class Harvester():
     def __init__(self, path="data/"):
-        self.logger = logging.getLogger()
-        self.logger.setLevel(logging.DEBUG)
-        handler = logging.FileHandler("KB-harvester.log")
-        self.logger.addHandler(handler)
+        self.data_path = path
         try:
-            os.makedirs(path=path, exist_ok=True)
+            os.access(self.data_path, os.F_OK)
+            os.makedirs(path=self.data_path)
+        except IOError as ioe:
+            if ioe.errno == errno.EACCES:
+                logger.critical(ioe)
+                exit(1)
+            elif ioe.errno == errno.EEXIST:
+                logger.debug("Data path already exists")
         except OSError:
-            self.logger.critical("Could not create data storage path '%s'" % path)
+            logger.critical("Could not create data storage path '%s'" % path)
             exit(1)
 
     def harvest_newspaper_urls(self, ppn, start=1):
@@ -178,19 +186,19 @@ class Harvester():
             sleep(5)
 
     def harvest_issue_files(self, url):
-        issue = self.get_issue(url)
+        issue = self.get_issue(url, self.data_path)
 
         # Make directory for issue
         try:
-            os.mkdir("data/" + issue.ppn_issue)
-            print "Directory created"
+            os.mkdir(self.data_path + issue.ppn_issue)
+            logger.info("Created directory for %s" % issue.ppn_issue)
         except OSError:
             # Directory already exists
-            print "Error creating directory - does it exist already?"
+            logger.debug("Could not create directory %s - assuming it already exists" % self.data_path + issue.ppn_issue)
 
         issue.save_header()
         issue.save_metadata()
-        print issue.identifier, issue.ppn_paper
+        logger.debug("Issue ID: %s; Paper PPN: %s" % (issue.identifier, issue.ppn_paper))
         issue.save_pdf()
         issue.save_pages()
         issue.save_articles()
@@ -204,19 +212,19 @@ class Harvester():
             return "no url"
 
     @staticmethod
-    def get_issue(issue_url):
+    def get_issue(issue_url, path):
         """Get the issue record (including references to files)"""
         r = requests.get(issue_url)
 
         if not r.status_code == 200:
             raise Exception('Error while getting data from %s' % issue_url)
 
-        return Issue(XML(r.content))
+        return Issue(XML(r.content), path)
 
     def harvest_newspaper_issues(self, ppn):
         """Retrieve issue files from stored URLs based on the newspaper PPN"""
         try:
-            f = open("issues-%s.txt" % ppn, 'r')
+            f = open(self.data_path + "issues-%s.txt" % ppn, 'r')
         except OSError as e:
             print "You should harvest the URLs for PPN %s first. Did you?"
         else:
