@@ -39,9 +39,12 @@ class Issue():
     """An issue of a newspaper"""
 
     def __init__(self, oai_data, path="data/"):
+        logger.debug("Initialising issue with %s" % oai_data)
         self.oai_data = oai_data
         self.oai_header = oai_data.find('.//oai:header', NAMESPACES)
+        logger.debug(oai_data.find('.//oai:metadata/*', NAMESPACES))
         self.didl = oai_data.find('.//didl:DIDL', NAMESPACES)
+        logger.debug(self.didl)
         self.data_path = path
         logger.info("init issue")
 
@@ -65,12 +68,15 @@ class Issue():
         logger.debug("Checking existence of %s" % filename)
         try:
             f = open(self.issue_path + filename, 'r')
-        except OSError:
-            logger.debug("%s does not exist")
+        except OSError as oe:
+            logger.debug("%s does not exist" % filename)
+            return False
+        except IOError as ie:
+            logger.debug("%s does not exist" % filename)
             return False
         else:
             with f:
-                return check_md5(f,digest)
+                return check_md5(f.read(),digest)
 
     def save_binary(self, url, digest, filename):
         if not self.check_file_existence(filename, digest):
@@ -161,17 +167,20 @@ class Harvester():
     def __init__(self, path="data/"):
         self.data_path = path
         try:
-            os.access(self.data_path, os.F_OK)
-            os.makedirs(path=self.data_path)
+            # os.access(self.data_path, os.F_OK)
+            os.makedirs(self.data_path)
         except IOError as ioe:
             if ioe.errno == errno.EACCES:
                 logger.critical(ioe)
                 exit(1)
             elif ioe.errno == errno.EEXIST:
                 logger.debug("Data path already exists")
-        except OSError:
-            logger.critical("Could not create data storage path '%s'" % path)
-            exit(1)
+        except OSError as ose:
+            if ose.errno == errno.EEXIST:
+                logger.debug("Data path already exists")
+            else:
+                logger.critical("Could not create data storage path '%s'" % path)
+                exit(1)
 
     def harvest_newspaper_urls(self, ppn, start=1):
         """Get and process all issues of a newspaper identified by PPN"""
@@ -182,13 +191,18 @@ class Harvester():
             maxpos = records[-1].findtext("./srw:recordPosition", namespaces=NAMESPACES)
             print "Max recordPosition in response:", maxpos
             urls = map(self.get_record_url, records)
-            with open("issues-%s.txt" % ppn, 'a') as f:
+            with open(self.data_path + "issues-%s.txt" % ppn, 'a') as f:
                 for url in urls:
                     f.write(url + "\n")
             sleep(5)
 
     def harvest_issue_files(self, url):
+        logger.debug("Getting issue from %s..." % url)
         issue = self.get_issue(url, self.data_path)
+        if issue.oai_data.find('{http://www.openarchives.org/OAI/2.0/}error') is not None:
+            code = issue.oai_data.find('{http://www.openarchives.org/OAI/2.0/}error').attrib
+            logger.error("OAI error found: %s" % code)
+            raise Exception("OAI error! '%s'" % code)
 
         # Make directory for issue
         try:
@@ -197,6 +211,11 @@ class Harvester():
         except OSError:
             # Directory already exists
             logger.debug("Could not create directory %s - assuming it already exists" % self.data_path + issue.ppn_issue)
+        except AttributeError:
+            # Something is incomplete
+            logger.warning("Something is incomplete")
+            logger.warning(issue.oai_data.find('.//oai:header', NAMESPACES))
+            return
 
         issue.save_header()
         issue.save_metadata()
@@ -209,6 +228,7 @@ class Harvester():
     def get_record_url(record_data):
         key = record_data.find('.//dddx:metadataKey', NAMESPACES)
         if key is not None:
+            logger.debug("Found record URL %s" % key.text)
             return key.text
         else:
             return "no url"
@@ -221,6 +241,7 @@ class Harvester():
         if not r.status_code == 200:
             raise Exception('Error while getting data from %s' % issue_url)
 
+        logger.debug("Received %s bytes" % r.headers['content-length'])
         return Issue(XML(r.content), path)
 
     def harvest_newspaper_issues(self, ppn):
@@ -232,5 +253,5 @@ class Harvester():
         else:
             with f:
                 for line in f:
-                    self.harvest_issue_files(line)
+                    self.harvest_issue_files(line.strip())
                     sleep(2)
