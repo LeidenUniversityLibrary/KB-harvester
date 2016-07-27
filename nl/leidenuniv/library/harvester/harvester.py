@@ -7,6 +7,8 @@ from xml.etree.ElementTree import XML
 import hashlib
 import requests
 import logging
+from tqdm import tqdm
+from collections import Counter
 
 logger = logging.getLogger('KB-harvester')
 logger.setLevel(logging.DEBUG)
@@ -114,7 +116,7 @@ class Issue():
             return elem.find(".//didl:Statement[@dc:type='role']", NAMESPACES).text == "alto"
 
         pages = filter(page_role, self.didl.findall("./didl:Item/didl:Item", NAMESPACES))
-        for page in pages:
+        for page in tqdm(pages, desc="Pages", leave=False, disable=False, position=1):
             components = page.findall("./didl:Component", NAMESPACES)
             map(save_component, filter(page_image, components))
             map(save_component, filter(page_alto, components))
@@ -136,7 +138,7 @@ class Issue():
             return elem.find(".//didl:Statement[@dc:type='role']", NAMESPACES).text == "ocr"
 
         articles = filter(article_role, self.didl.findall("./didl:Item/didl:Item", NAMESPACES))
-        for article in articles:
+        for article in tqdm(articles, desc="Articles", leave=False, disable=False, position=1):
             components = article.findall("./didl:Component", NAMESPACES)
             map(save_component, filter(article_ocr, components))
 
@@ -166,6 +168,7 @@ class Issue():
 class Harvester():
     def __init__(self, path="data/"):
         self.data_path = path
+        self.url_counts = Counter()
         try:
             # os.access(self.data_path, os.F_OK)
             os.makedirs(self.data_path)
@@ -184,17 +187,23 @@ class Harvester():
 
     def harvest_newspaper_urls(self, ppn, start=1):
         """Get and process all issues of a newspaper identified by PPN"""
+        logger.info("Starting URL harvest for PPN %s" % ppn)
         query = "ppn exact %s sortBy dc.date/sort.ascending" % ppn
         client = Sru()
-        for resp in client.search(query=query, collection="DDD", maximumrecords=100, startrecord=start):
-            records = resp.record_data.findall(".//srw:records/srw:record", namespaces=NAMESPACES)
-            maxpos = records[-1].findtext("./srw:recordPosition", namespaces=NAMESPACES)
-            print "Max recordPosition in response:", maxpos
-            urls = map(self.get_record_url, records)
-            with open(self.data_path + "issues-%s.txt" % ppn, 'a') as f:
-                for url in urls:
-                    f.write(url + "\n")
-            sleep(5)
+        with tqdm(desc="URLs (PPN: %s)" % ppn, unit="issue", miniters=1) as pbar:
+            for resp in client.search(query=query, collection="DDD", maximumrecords=100, startrecord=start):
+                pbar.total = len(resp)
+                records = resp.record_data.findall(".//srw:records/srw:record", namespaces=NAMESPACES)
+                maxpos = records[-1].findtext("./srw:recordPosition", namespaces=NAMESPACES)
+                logger.info("Max recordPosition in response: %s" % maxpos)
+                urls = map(self.get_record_url, records)
+                logger.debug("No of URLs in response: %s" % len(urls))
+                with open(self.data_path + "issues-%s.txt" % ppn, 'a') as f:
+                    for url in urls:
+                        f.write(url + "\n")
+                pbar.update(len(urls))
+                self.url_counts[ppn] += len(urls)
+                sleep(2)
 
     def harvest_issue_files(self, url):
         logger.debug("Getting issue from %s..." % url)
@@ -252,6 +261,6 @@ class Harvester():
             print "You should harvest the URLs for PPN %s first. Did you?"
         else:
             with f:
-                for line in f:
+                for line in tqdm(f, desc="Issues", total=self.url_counts[ppn], unit=" issue", position=0):
                     self.harvest_issue_files(line.strip())
                     sleep(2)

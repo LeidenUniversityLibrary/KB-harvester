@@ -17,6 +17,8 @@ class Response(response):
         else:
             raise StopIteration
 
+    def __len__(self):
+        return self.sru.nr_of_records
 
 class Sru():
 
