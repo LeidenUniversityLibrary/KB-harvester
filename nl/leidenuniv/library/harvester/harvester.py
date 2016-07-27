@@ -7,13 +7,14 @@ from xml.etree.ElementTree import XML
 import hashlib
 import requests
 import logging
+from logging.handlers import RotatingFileHandler
 from tqdm import tqdm
 from collections import Counter
 
 logger = logging.getLogger('KB-harvester')
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s')
-handler = logging.FileHandler("KB-harvester.log")
+handler = RotatingFileHandler("KB-harvester.log", maxBytes=5*1024*1024, backupCount=3)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
@@ -216,10 +217,10 @@ class Harvester():
         # Make directory for issue
         try:
             os.mkdir(self.data_path + issue.ppn_issue)
-            logger.info("Created directory for %s" % issue.ppn_issue)
+            logger.info("Created directory for issue %s" % issue.ppn_issue)
         except OSError:
             # Directory already exists
-            logger.debug("Could not create directory %s - assuming it already exists" % self.data_path + issue.ppn_issue)
+            logger.debug("Could not create directory %s - assuming it already exists" % (self.data_path + issue.ppn_issue))
         except AttributeError:
             # Something is incomplete
             logger.warning("Something is incomplete")
