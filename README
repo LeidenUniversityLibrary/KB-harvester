@@ -1,8 +1,0 @@
-KB harvester
-
-This package provides a wrapper for downloading metadata and files for historical newspapers from the Koninklijke
-Bibliotheek (the Dutch Royal Library/National Library of the Netherlands). The KB provides a Python module to access
-their data services APIs, based on SRU and OAI-PMH.
-
-The KB harvester allows you to get publicly available files for newspapers identified by their PPN and save them
-locally.
