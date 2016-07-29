@@ -211,8 +211,11 @@ class Harvester():
         issue = self.get_issue(url, self.data_path)
         if issue.oai_data.find('{http://www.openarchives.org/OAI/2.0/}error') is not None:
             code = issue.oai_data.find('{http://www.openarchives.org/OAI/2.0/}error').attrib
-            logger.error("OAI error found: %s" % code)
-            raise Exception("OAI error! '%s'" % code)
+            logger.error("OAI error found: %s" % code['code'])
+            # raise Exception("OAI error! '%s'" % code)
+            with open(self.data_path + "errors.tsv", 'a') as f:
+                f.write("%s\t%s\n" % (url, code['code']))
+            return
 
         # Make directory for issue
         try:
