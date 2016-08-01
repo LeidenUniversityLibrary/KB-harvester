@@ -284,6 +284,10 @@ class Harvester():
     def harvest_newspaper_error_issues(self, ppn):
         """Retrieve issue files from previously failing URLs based on the newspaper PPN"""
         try:
+            with open(self.data_path + "errors.tsv", 'r') as countlines:
+                for line in tqdm(countlines, desc='Errors', unit=' URL'):
+                    self.url_counts[ppn] += 1
+
             f = open(self.data_path + "errors.tsv", 'r')
         except OSError:
             logger.error(u"Could not read the URLs for PPN {0:s} from {1:s}".format(ppn, self.data_path + "errors.tsv"))
