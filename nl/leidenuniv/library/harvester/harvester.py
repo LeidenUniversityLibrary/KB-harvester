@@ -42,7 +42,7 @@ class Issue():
     """An issue of a newspaper"""
 
     def __init__(self, oai_data, path="data/"):
-        logger.debug("Initialising issue with %s" % oai_data)
+        logger.debug(u"Initialising issue with {0:s}".format(oai_data))
         self.oai_data = oai_data
         self.oai_header = oai_data.find('.//oai:header', NAMESPACES)
         logger.debug(oai_data.find('.//oai:metadata/*', NAMESPACES))
@@ -68,14 +68,14 @@ class Issue():
         return self.didl.find('.//dc:identifier[@xsi:type="dcx:PPN"]', NAMESPACES).text
 
     def check_file_existence(self, filename, digest):
-        logger.debug("Checking existence of %s" % filename)
+        logger.debug(u"Checking existence of {0:s}".format(filename))
         try:
             f = open(self.issue_path + filename, 'r')
         except OSError as oe:
-            logger.debug("%s does not exist" % filename)
+            logger.debug(u"{0:s} does not exist".format(filename))
             return False
         except IOError as ie:
-            logger.debug("%s does not exist" % filename)
+            logger.debug(u"{0:s} does not exist".format(filename))
             return False
         else:
             with f:
@@ -83,15 +83,15 @@ class Issue():
 
     def save_binary(self, url, digest, filename):
         if not self.check_file_existence(filename, digest):
-            logger.debug("Downloading %s" % url)
+            logger.debug(u"Downloading {0:s}".format(url))
             p = requests.get(url)
             if not p.status_code == 200:
-                raise Exception('Error while getting data from %s' % url)
-            logger.debug("MD5 checksum matches download: %s" % check_md5(p.content, digest))
-            logger.debug("Saving as %s" % filename)
+                raise Exception(u'Error while getting data from {0:s}'.format(url))
+            logger.debug(u"MD5 checksum matches download: {0:s}".format(check_md5(p.content, digest)))
+            logger.debug(u"Saving as {0:s}".format(filename))
             with open(self.issue_path + filename, 'wb') as f:
                 f.write(p.content)
-            logger.info("Saved %s to %s" % (url, filename))
+            logger.info(u"Saved {0:s} to {1:s}".format(url, filename))
             logger.debug("Sleeping for a sec")
             sleep(1)
         else:
@@ -167,9 +167,11 @@ class Issue():
 
 
 class Harvester():
-    def __init__(self, path="data/"):
+    def __init__(self, path="data/", key=None):
         self.data_path = path
         self.url_counts = Counter()
+        if key is not None:
+            self.api_key = key
         try:
             # os.access(self.data_path, os.F_OK)
             os.makedirs(self.data_path)
@@ -183,35 +185,44 @@ class Harvester():
             if ose.errno == errno.EEXIST:
                 logger.debug("Data path already exists")
             else:
-                logger.critical("Could not create data storage path '%s'" % path)
+                logger.critical(u"Could not create data storage path '{0:s}'".format(path))
                 exit(1)
 
     def harvest_newspaper_urls(self, ppn, start=1):
         """Get and process all issues of a newspaper identified by PPN"""
-        logger.info("Starting URL harvest for PPN %s" % ppn)
-        query = "ppn exact %s sortBy dc.date/sort.ascending" % ppn
+        logger.info(u"Starting URL harvest for PPN {0:s}".format(ppn))
+        query = u"ppn exact {0:s} sortBy dc.date/sort.ascending".format(ppn)
         client = Sru()
-        with tqdm(desc="URLs (PPN: %s)" % ppn, unit="issue", miniters=1) as pbar:
+        with tqdm(desc=u"URLs (PPN: {0:s})".format(ppn), unit="issue", miniters=1) as pbar:
             for resp in client.search(query=query, collection="DDD", maximumrecords=100, startrecord=start):
                 pbar.total = len(resp)
                 records = resp.record_data.findall(".//srw:records/srw:record", namespaces=NAMESPACES)
                 maxpos = records[-1].findtext("./srw:recordPosition", namespaces=NAMESPACES)
-                logger.info("Max recordPosition in response: %s" % maxpos)
+                logger.info(u"Max recordPosition in response: {0:s}".format(maxpos))
                 urls = map(self.get_record_url, records)
-                logger.debug("No of URLs in response: %s" % len(urls))
-                with open(self.data_path + "issues-%s.txt" % ppn, 'a') as f:
+                logger.debug(u"No of URLs in response: {0:s}".format(len(urls)))
+                with open(self.data_path + u"issues-{0:s}.txt".format(ppn), 'a') as f:
                     for url in urls:
                         f.write(url + "\n")
                 pbar.update(len(urls))
                 self.url_counts[ppn] += len(urls)
                 sleep(2)
 
-    def harvest_issue_files(self, url):
-        logger.debug("Getting issue from %s..." % url)
+    def url_with_key(self, url):
+        """Return the OAI-PMH request URL with this Harvester's API key if set"""
+        if self.api_key:
+            parts = url.partition('oai')
+            return "{0}{1}/{2}{3}".format(parts[0], parts[1], self.api_key, parts[2])
+        else:
+            return url
+
+    def harvest_issue_files(self, url_in):
+        url = self.url_with_key(url_in)
+        logger.debug(u"Getting issue from {0:s}...".format(url))
         issue = self.get_issue(url, self.data_path)
         if issue.oai_data.find('{http://www.openarchives.org/OAI/2.0/}error') is not None:
             code = issue.oai_data.find('{http://www.openarchives.org/OAI/2.0/}error').attrib
-            logger.error("OAI error found: %s" % code['code'])
+            logger.error(u"OAI error found: {0:s}".format(code['code']))
             # raise Exception("OAI error! '%s'" % code)
             with open(self.data_path + "errors.tsv", 'a') as f:
                 f.write("%s\t%s\n" % (url, code['code']))
@@ -220,10 +231,11 @@ class Harvester():
         # Make directory for issue
         try:
             os.mkdir(self.data_path + issue.ppn_issue)
-            logger.info("Created directory for issue %s" % issue.ppn_issue)
+            logger.info(u"Created directory for issue {0:s}".format(issue.ppn_issue))
         except OSError:
             # Directory already exists
-            logger.debug("Could not create directory %s - assuming it already exists" % (self.data_path + issue.ppn_issue))
+            logger.debug(u"Could not create directory {0:s} - assuming it already exists".format(
+                self.data_path + issue.ppn_issue))
         except AttributeError:
             # Something is incomplete
             logger.warning("Something is incomplete")
@@ -232,7 +244,7 @@ class Harvester():
 
         issue.save_header()
         issue.save_metadata()
-        logger.debug("Issue ID: %s; Paper PPN: %s" % (issue.identifier, issue.ppn_paper))
+        logger.debug(u"Issue ID: {0:s}; Paper PPN: {1:s}".format(issue.identifier, issue.ppn_paper))
         issue.save_pdf()
         issue.save_pages()
         issue.save_articles()
@@ -241,7 +253,7 @@ class Harvester():
     def get_record_url(record_data):
         key = record_data.find('.//dddx:metadataKey', NAMESPACES)
         if key is not None:
-            logger.debug("Found record URL %s" % key.text)
+            logger.debug(u"Found record URL {0:s}".format(key.text))
             return key.text
         else:
             return "no url"
@@ -252,19 +264,32 @@ class Harvester():
         r = requests.get(issue_url)
 
         if not r.status_code == 200:
-            raise Exception('Error while getting data from %s' % issue_url)
+            raise Exception(u'Error while getting data from {0:s}'.format(issue_url))
 
-        logger.debug("Received %s bytes" % r.headers['content-length'])
+        logger.debug(u"Received {0:s} bytes".format(r.headers['content-length']))
         return Issue(XML(r.content), path)
 
     def harvest_newspaper_issues(self, ppn):
         """Retrieve issue files from stored URLs based on the newspaper PPN"""
         try:
-            f = open(self.data_path + "issues-%s.txt" % ppn, 'r')
-        except OSError as e:
-            print "You should harvest the URLs for PPN %s first. Did you?"
+            f = open(self.data_path + u"issues-{0:s}.txt".format(ppn), 'r')
+        except OSError:
+            logger.error(
+                u"Could not read the URLs for PPN {0:s} from {1:s}".format(ppn, self.data_path + "issues-%s.txt" % ppn))
         else:
             with f:
                 for line in tqdm(f, desc="Issues", total=self.url_counts[ppn], unit=" issue", position=0):
                     self.harvest_issue_files(line.strip())
+                    sleep(2)
+
+    def harvest_newspaper_error_issues(self, ppn):
+        """Retrieve issue files from previously failing URLs based on the newspaper PPN"""
+        try:
+            f = open(self.data_path + "errors.tsv", 'r')
+        except OSError:
+            logger.error(u"Could not read the URLs for PPN {0:s} from {1:s}".format(ppn, self.data_path + "errors.tsv"))
+        else:
+            with f:
+                for line in tqdm(f, desc="Issues", total=self.url_counts[ppn], unit=" issue", position=0):
+                    self.harvest_issue_files(line.split('\t')[0])
                     sleep(2)
