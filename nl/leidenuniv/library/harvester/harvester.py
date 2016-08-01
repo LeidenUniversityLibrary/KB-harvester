@@ -170,8 +170,7 @@ class Harvester():
     def __init__(self, path="data/", key=None):
         self.data_path = path
         self.url_counts = Counter()
-        if key is not None:
-            self.api_key = key
+        self.api_key = key
         try:
             # os.access(self.data_path, os.F_OK)
             os.makedirs(self.data_path)
@@ -210,7 +209,7 @@ class Harvester():
 
     def url_with_key(self, url):
         """Return the OAI-PMH request URL with this Harvester's API key if set"""
-        if self.api_key:
+        if self.api_key is not None:
             parts = url.partition('oai')
             return "{0}{1}/{2}{3}".format(parts[0], parts[1], self.api_key, parts[2])
         else:
