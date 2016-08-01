@@ -87,7 +87,7 @@ class Issue():
             p = requests.get(url)
             if not p.status_code == 200:
                 raise Exception(u'Error while getting data from {0:s}'.format(url))
-            logger.debug(u"MD5 checksum matches download: {0:s}".format(check_md5(p.content, digest)))
+            logger.debug(u"MD5 checksum matches download: {0}".format(check_md5(p.content, digest)))
             logger.debug(u"Saving as {0:s}".format(filename))
             with open(self.issue_path + filename, 'wb') as f:
                 f.write(p.content)
@@ -199,7 +199,7 @@ class Harvester():
                 maxpos = records[-1].findtext("./srw:recordPosition", namespaces=NAMESPACES)
                 logger.info(u"Max recordPosition in response: {0:s}".format(maxpos))
                 urls = map(self.get_record_url, records)
-                logger.debug(u"No of URLs in response: {0:s}".format(len(urls)))
+                logger.debug(u"No of URLs in response: {0}".format(len(urls)))
                 with open(self.data_path + u"issues-{0:s}.txt".format(ppn), 'a') as f:
                     for url in urls:
                         f.write(url + "\n")
