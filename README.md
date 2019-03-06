@@ -62,3 +62,13 @@ The following files are produced by the tool:
 Some files mentioned in the DIDL metadata are not available for download, such as the preservation (master) copies of the scans and technical metadata.
 
 Note: the files for each issue add up to something between 5 and 100 MB, depending on the image quality and number of pages and articles.
+
+# Support
+
+Please file an issue in this repository for support, or contact the author.
+
+**Note: the Koninklijke Bibliotheek are aware of, but do not support this package.**
+
+# Author and license
+
+This package was created by Ben Companjen of the [Centre for Digital Scholarship at Leiden University Libraries](https://www.library.universiteitleiden.nl/cds/) in 2016. Copyright is held by Leiden University Libraries.
