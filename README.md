@@ -11,7 +11,7 @@ The library provided in this package wraps it to provide a simple interface allo
 
 First, clone or download this repository to your machine:
 
-    git clone https://github.com/bencomp/KB-harvester.git
+    git clone https://github.com/LeidenUniversityLibrary/KB-harvester.git
     cd KB-harvester
 
 The KB harvester depends on three packages: [`kb`](https://pypi.python.org/pypi/kb/), [`tqdm`](https://pypi.python.org/pypi/tqdm) and [`requests`](https://pypi.python.org/pypi/requests). If you have these installed in your environment or virtualenv and only want to run the command-line tool `harvest.py`, you're good to go. Otherwise, the command
